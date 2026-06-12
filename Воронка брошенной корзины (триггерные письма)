@@ -1,0 +1,48 @@
+-- Таблицы для воронки
+CREATE TABLE cart_events (
+    event_id INT PRIMARY KEY,
+    user_id INT,
+    cart_id INT,
+    event_type VARCHAR(20),
+    step_number INT,
+    event_time TIMESTAMP
+);
+
+-- Данные
+INSERT INTO cart_events VALUES
+(1, 1, 101, 'email_sent', 1, '2026-06-01 09:00:00'),
+(2, 1, 101, 'email_open', 1, '2026-06-01 09:30:00'),
+(3, 1, 101, 'email_click', 1, '2026-06-01 09:32:00'),
+(4, 1, 101, 'email_sent', 2, '2026-06-02 09:00:00'),
+(5, 1, 101, 'email_open', 2, '2026-06-02 10:00:00'),
+(6, 1, 101, 'order_created', 0, '2026-06-02 10:30:00'),
+(7, 2, 102, 'email_sent', 1, '2026-06-03 09:00:00'),
+(8, 2, 102, 'email_open', 1, '2026-06-03 09:20:00'),
+(9, 2, 102, 'email_sent', 2, '2026-06-04 09:00:00'),
+(10, 2, 102, 'email_open', 2, '2026-06-04 09:15:00'),
+(11, 2, 102, 'order_created', 0, '2026-06-04 09:45:00');
+
+-- Воронка
+WITH funnel AS (
+    SELECT 
+        cart_id,
+        MAX(CASE WHEN event_type = 'email_sent' AND step_number = 1 THEN 1 ELSE 0 END) AS step1_sent,
+        MAX(CASE WHEN event_type = 'email_open' AND step_number = 1 THEN 1 ELSE 0 END) AS step1_open,
+        MAX(CASE WHEN event_type = 'email_click' AND step_number = 1 THEN 1 ELSE 0 END) AS step1_click,
+        MAX(CASE WHEN event_type = 'email_sent' AND step_number = 2 THEN 1 ELSE 0 END) AS step2_sent,
+        MAX(CASE WHEN event_type = 'email_open' AND step_number = 2 THEN 1 ELSE 0 END) AS step2_open,
+        MAX(CASE WHEN event_type = 'order_created' THEN 1 ELSE 0 END) AS converted
+    FROM cart_events
+    GROUP BY cart_id
+)
+SELECT 
+    COUNT(*) AS total_carts,
+    SUM(step1_sent) AS step1_sent,
+    SUM(step1_open) AS step1_opened,
+    ROUND(100.0 * SUM(step1_open) / NULLIF(SUM(step1_sent), 0), 2) AS step1_open_rate,
+    SUM(step2_sent) AS step2_sent,
+    SUM(step2_open) AS step2_opened,
+    ROUND(100.0 * SUM(step2_open) / NULLIF(SUM(step2_sent), 0), 2) AS step2_open_rate,
+    SUM(converted) AS converted,
+    ROUND(100.0 * SUM(converted) / NULLIF(SUM(step1_sent), 0), 2) AS conversion_rate
+FROM funnel;
