@@ -1,0 +1,51 @@
+-- Таблицы для когортного анализа
+CREATE TABLE users_cohort (
+    user_id INT PRIMARY KEY,
+    child_age_years INT,
+    registration_date DATE,
+    status VARCHAR(20)
+);
+
+CREATE TABLE email_logs_cohort (
+    log_id INT PRIMARY KEY,
+    user_id INT,
+    event_type VARCHAR(20),
+    event_date DATE
+);
+
+-- Данные
+INSERT INTO users_cohort VALUES
+(1, 5, '2026-01-10', 'active'),
+(2, 12, '2026-02-15', 'active'),
+(3, 8, '2026-03-20', 'active'),
+(4, 0, '2026-04-25', 'active'),
+(5, 15, '2026-05-01', 'active');
+
+INSERT INTO email_logs_cohort VALUES
+(1, 1, 'open', '2026-06-02'),
+(2, 3, 'open', '2026-06-03'),
+(3, 2, 'open', '2026-06-05'),
+(4, 4, 'open', '2026-06-07');
+
+-- Когортный анализ: open rate по возрастным группам за период после кампании (июнь 2026)
+WITH user_groups AS (
+    SELECT 
+        user_id,
+        CASE 
+            WHEN child_age_years BETWEEN 0 AND 6 THEN '0-6 лет'
+            WHEN child_age_years BETWEEN 7 AND 10 THEN '7-10 лет'
+            WHEN child_age_years BETWEEN 11 AND 14 THEN '11-14 лет'
+            ELSE '14+ лет'
+        END AS age_group
+    FROM users_cohort
+    WHERE status = 'active'
+)
+SELECT 
+    age_group,
+    COUNT(DISTINCT u.user_id) AS total_users,
+    COUNT(DISTINCT CASE WHEN l.event_date >= '2026-06-01' THEN l.user_id END) AS opened_users,
+    ROUND(100.0 * COUNT(DISTINCT CASE WHEN l.event_date >= '2026-06-01' THEN l.user_id END) / COUNT(DISTINCT u.user_id), 2) AS open_rate_pct
+FROM user_groups u
+LEFT JOIN email_logs_cohort l ON u.user_id = l.user_id
+GROUP BY age_group
+ORDER BY open_rate_pct DESC;
