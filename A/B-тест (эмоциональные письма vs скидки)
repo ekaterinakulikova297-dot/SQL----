@@ -1,0 +1,78 @@
+-- Таблицы для A/B-теста
+CREATE TABLE users_ab (
+    user_id INT PRIMARY KEY,
+    email VARCHAR(100),
+    child_name VARCHAR(50),
+    status VARCHAR(20)
+);
+
+CREATE TABLE campaign_members_ab (
+    member_id INT PRIMARY KEY,
+    campaign_id INT,
+    user_id INT,
+    variant VARCHAR(1),
+    sent_date TIMESTAMP
+);
+
+CREATE TABLE email_logs_ab (
+    log_id INT PRIMARY KEY,
+    user_id INT,
+    event_type VARCHAR(20),
+    event_date TIMESTAMP
+);
+
+CREATE TABLE orders_ab (
+    order_id INT PRIMARY KEY,
+    user_id INT,
+    order_date DATE,
+    status VARCHAR(20)
+);
+
+-- Данные
+INSERT INTO users_ab VALUES
+(1, 'p1@mail.com', 'Анна', 'active'),
+(2, 'p2@mail.com', 'Иван', 'active'),
+(3, 'p3@mail.com', 'Мария', 'active'),
+(4, 'p4@mail.com', 'Олег', 'active');
+
+INSERT INTO campaign_members_ab VALUES
+(1, 100, 1, 'A', '2026-06-01 10:00:00'),
+(2, 100, 2, 'B', '2026-06-01 10:00:00'),
+(3, 100, 3, 'A', '2026-06-01 10:00:00'),
+(4, 100, 4, 'B', '2026-06-01 10:00:00');
+
+INSERT INTO email_logs_ab VALUES
+(1, 1, 'open', '2026-06-02 12:00:00'),
+(2, 1, 'click', '2026-06-02 12:05:00'),
+(3, 3, 'open', '2026-06-03 09:00:00'),
+(4, 2, 'open', '2026-06-05 14:00:00'),
+(5, 2, 'click', '2026-06-05 14:10:00');
+
+INSERT INTO orders_ab VALUES
+(101, 1, '2026-06-03', 'completed'),
+(102, 3, '2026-06-05', 'completed'),
+(103, 2, '2026-06-07', 'completed');
+
+-- Аналитический запрос A/B-теста
+WITH ab_data AS (
+    SELECT 
+        cm.variant,
+        COUNT(DISTINCT cm.user_id) AS total_sent,
+        COUNT(DISTINCT CASE WHEN l.event_type = 'open' THEN l.user_id END) AS opened,
+        COUNT(DISTINCT CASE WHEN l.event_type = 'click' THEN l.user_id END) AS clicked,
+        COUNT(DISTINCT CASE WHEN o.order_id IS NOT NULL THEN o.user_id END) AS converted
+    FROM campaign_members_ab cm
+    LEFT JOIN email_logs_ab l ON cm.user_id = l.user_id AND l.event_date <= cm.sent_date + INTERVAL '7 days'
+    LEFT JOIN orders_ab o ON cm.user_id = o.user_id AND o.order_date BETWEEN cm.sent_date AND cm.sent_date + INTERVAL '14 days'
+    GROUP BY cm.variant
+)
+SELECT 
+    variant,
+    total_sent,
+    opened,
+    ROUND(100.0 * opened / total_sent, 2) AS open_rate,
+    clicked,
+    converted,
+    ROUND(100.0 * converted / total_sent, 2) AS conversion_rate
+FROM ab_data
+ORDER BY variant;
